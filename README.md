@@ -21,8 +21,8 @@ Scrape MILLIONS of images / day.
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/yourusername/image-scraper.git
-   cd image-scraper
+   git clone https://github.com/birdhouses/image_scraper.git
+   cd image_scraper
    ```
 
 2. **Install Dependencies**

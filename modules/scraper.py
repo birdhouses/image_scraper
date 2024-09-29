@@ -100,7 +100,7 @@ class ImageScraper:
                 # Process tasks as they complete
                 for future in as_completed(futures):
                     try:
-                        future.result(timeout=60)  # Adjust timeout as needed
+                        future.result(timeout=60)
                     except Exception as e:
                         print(f"Error processing task: {e}")
                         continue
