@@ -6,15 +6,36 @@ from multiprocessing import Process, Queue
 from scrapy.crawler import CrawlerRunner
 from twisted.internet import reactor
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from PIL import Image
+from io import BytesIO
+import uuid
 
 class BingImageSpider(scrapy.Spider):
     name = "bing_image_spider"
 
-    def __init__(self, query, folder_name, *args, **kwargs):
+    custom_settings = {
+        'DOWNLOAD_TIMEOUT': 30,
+        'CONCURRENT_REQUESTS': 16,
+        'CONCURRENT_REQUESTS_PER_DOMAIN': 8,
+    }
+
+    def __init__(self, query, folder_name, max_images=500, *args, **kwargs):
         super(BingImageSpider, self).__init__(*args, **kwargs)
         self.query = query
         self.folder_name = folder_name
-        self.start_urls = [f"https://www.bing.com/images/search?q={query}"]
+        self.max_images = max_images
+
+    def start_requests(self):
+        offset = 0
+        count = 35
+        while offset < self.max_images:
+            yield scrapy.Request(
+                url=f"https://www.bing.com/images/async?q={self.query}&first={offset}&count={count}",
+                callback=self.parse,
+                errback=self.handle_error,
+                dont_filter=True
+            )
+            offset += count
 
     def parse(self, response):
         # Extract image URLs using regex
@@ -33,12 +54,24 @@ class BingImageSpider(scrapy.Spider):
             yield scrapy.Request(image_url, callback=self.save_image, meta={'idx': idx})
 
     def save_image(self, response):
-        idx = response.meta['idx']
-        image_data = response.body
-        file_extension = response.url.split('.')[-1][:4]  # Limit to 4 chars to handle query strings
-        filename = os.path.join(self.folder_name, f"{self.query}_{idx}.{file_extension}")
-        with open(filename, 'wb') as f:
-            f.write(image_data)
+        try:
+            img = Image.open(BytesIO(response.body))
+            img.verify()
+
+            if img.width < 100 or img.height < 100:
+                return
+
+            uuid_str = str(uuid.uuid4())
+            img_format = img.format.lower() if img.format else 'jpg'
+            filename = os.path.join(self.folder_name, f"{uuid_str}.{img_format}")
+
+            with open(filename, 'wb') as f:
+                f.write(response.body)
+        except Exception as e:
+            self.logger.debug(f'Invalid image skipped: {response.url} - {str(e)}')
+
+    def handle_error(self, failure):
+        self.logger.error(f'Request failed: {failure.request.url}')
 
 class ImageScraper:
     def process_single_image_search(self, topic, folder_name):
