@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
 from io import BytesIO
 import uuid
+import json
 
 class BingImageSpider(scrapy.Spider):
     name = "bing_image_spider"
@@ -30,7 +31,7 @@ class BingImageSpider(scrapy.Spider):
         count = 35
         while offset < self.max_images:
             yield scrapy.Request(
-                url=f"https://www.bing.com/images/async?q={self.query}&first={offset}&count={count}",
+                url=f"https://www.bing.com/images/async?q={self.query}&first={offset}&count={count}&ADLT=off",
                 callback=self.parse,
                 errback=self.handle_error,
                 dont_filter=True
@@ -64,9 +65,23 @@ class BingImageSpider(scrapy.Spider):
             uuid_str = str(uuid.uuid4())
             img_format = img.format.lower() if img.format else 'jpg'
             filename = os.path.join(self.folder_name, f"{uuid_str}.{img_format}")
+            metadata_filename = os.path.join(self.folder_name, f"{uuid_str}.json")
 
             with open(filename, 'wb') as f:
                 f.write(response.body)
+
+            metadata = {
+                'source_url': response.url,
+                'query': self.query,
+                'width': img.width,
+                'height': img.height,
+                'format': img.format,
+                'file_size': len(response.body),
+                'filename': f"{uuid_str}.{img_format}"
+            }
+
+            with open(metadata_filename, 'w', encoding='utf-8') as f:
+                json.dump(metadata, f, indent=2)
         except Exception as e:
             self.logger.debug(f'Invalid image skipped: {response.url} - {str(e)}')
 
